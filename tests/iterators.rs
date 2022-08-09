@@ -15,7 +15,7 @@ extern crate encode_unicode;
 use encode_unicode::{IterExt, SliceExt, CharExt, Utf8Char};
 use encode_unicode::iterator::Utf8CharSplitter;
 use encode_unicode::error::Utf8ErrorKind::*;
-use encode_unicode::error::Utf16PairError::*;
+use encode_unicode::error::Utf16Error::*;
 use std::io::Read;
 use std::cmp::min;
 
@@ -65,7 +65,7 @@ use std::cmp::min;
     assert_eq!(format!("{:?}", &iter),
                format!("Utf16CharMerger {{ buffered: None, inner: {:?} }}", slice.iter()));
 
-    assert_eq!(iter.next(), Some(Err(UnmatchedLeadingSurrogate)));
+    assert_eq!(iter.next(), Some(Err(UnmatchedPairStart)));
     assert_eq!(iter.size_hint(), (1, Some(4)));
     assert_eq!(
         format!("{:?}", &iter),
@@ -84,7 +84,7 @@ use std::cmp::min;
         format!("Utf16CharDecoder {{ units[0..]: {:?} }}", &slice)
     );
 
-    assert_eq!(iter.next(), Some((0, Err(UnmatchedLeadingSurrogate), 1)));
+    assert_eq!(iter.next(), Some((0, Err(UnmatchedPairStart), 1)));
     assert_eq!(
         format!("{:?}", &iter),
         format!("Utf16CharDecoder {{ units[1..]: {:?} }}", &slice[1..])

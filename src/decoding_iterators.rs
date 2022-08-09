@@ -14,9 +14,7 @@
 //! well with other adaptors,
 //! while the slice iterators yield both to make more advanced use cases easy.
 
-use errors::{InvalidUtf16FirstUnit, Utf16PairError, Utf8Error};
-use errors::InvalidUtf16Slice::*;
-use errors::Utf16PairError::*;
+use errors::{Utf8Error, Utf16Error};
 use errors::Utf8ErrorKind::*;
 use utf8_char::Utf8Char;
 use utf16_char::Utf16Char;
@@ -373,7 +371,7 @@ impl<B:Borrow<u16>, I:Iterator<Item=B>> Utf16CharMerger<B,I> {
     }
 }
 impl<B:Borrow<u16>, I:Iterator<Item=B>> Iterator for Utf16CharMerger<B,I> {
-    type Item = Result<Utf16Char,Utf16PairError>;
+    type Item = Result<Utf16Char,Utf16Error>;
     fn next(&mut self) -> Option<Self::Item> {
         let first = self.prev.take().or_else(|| self.iter.next() );
         first.map(|first| unsafe {
@@ -381,18 +379,18 @@ impl<B:Borrow<u16>, I:Iterator<Item=B>> Iterator for Utf16CharMerger<B,I> {
                 Ok(false) => Ok(Utf16Char::from_array_unchecked([*first.borrow(), 0])),
                 Ok(true) => match self.iter.next() {
                     Some(second) => match second.borrow().utf16_needs_extra_unit() {
-                        Err(InvalidUtf16FirstUnit) => Ok(Utf16Char::from_tuple_unchecked((
+                        Err(_) => Ok(Utf16Char::from_tuple_unchecked((
                             *first.borrow(),
                             Some(*second.borrow())
                         ))),
                         Ok(_) => {
                             self.prev = Some(second);
-                            Err(Utf16PairError::UnmatchedLeadingSurrogate)
+                            Err(Utf16Error::UnmatchedPairStart)
                         }
                     },
-                    None => Err(Utf16PairError::Incomplete)
+                    None => Err(Utf16Error::TooFewUnits)
                 },
-                Err(InvalidUtf16FirstUnit) => Err(Utf16PairError::UnexpectedTrailingSurrogate),
+                Err(error) => Err(error),
             }
         })
     }
@@ -450,7 +448,7 @@ impl<'a> Utf16CharDecoder<'a> {
     }
 }
 impl<'a> Iterator for Utf16CharDecoder<'a> {
-    type Item = (usize,Result<Utf16Char,Utf16PairError>,usize);
+    type Item = (usize,Result<Utf16Char,Utf16Error>,usize);
     #[inline]
     fn next(&mut self) -> Option<Self::Item>  {
         let start = self.index;
@@ -459,18 +457,18 @@ impl<'a> Iterator for Utf16CharDecoder<'a> {
                 self.index += len;
                 Some((start, Ok(u16c), len))
             },
-            Err(EmptySlice) => None,
-            Err(FirstIsTrailingSurrogate) => {
+            Err(Utf16Error::TooFewUnits) if self.as_slice().is_empty() => None,
+            Err(Utf16Error::UnexpectedPairEnd) => {
                 self.index += 1;
-                Some((start, Err(UnexpectedTrailingSurrogate), 1))
+                Some((start, Err(Utf16Error::UnexpectedPairEnd), 1))
             },
-            Err(SecondIsNotTrailingSurrogate) => {
+            Err(Utf16Error::UnmatchedPairStart) => {
                 self.index += 1;
-                Some((start, Err(UnmatchedLeadingSurrogate), 1))
+                Some((start, Err(Utf16Error::UnmatchedPairStart), 1))
             },
-            Err(MissingSecond) => {
+            Err(Utf16Error::TooFewUnits) => {
                 self.index = self.slice.len();
-                Some((start, Err(Incomplete), 1))
+                Some((start, Err(Utf16Error::TooFewUnits), 1))
             }
         }
     }

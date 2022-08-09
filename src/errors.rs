@@ -47,11 +47,6 @@ macro_rules! single_cause {($(#[$doc:meta])* $err:ident => $desc:expr) => {
 }}
 
 
-single_cause!{
-    /// Cannot tell whether an `u16` needs an extra unit,
-    /// because it's a trailing surrogate itself.
-    InvalidUtf16FirstUnit => "is a trailing surrogate"
-}
 
 single_cause!{
     /// Error returned by [`Utf8Char::from_ascii()`](struct.Utf8Char.html#method.from_ascii)
@@ -103,48 +98,52 @@ impl CodepointError {
 }
 
 
-simple!{/// Reasons why a `[u16; 2]` doesn't form a valid UTF-16 codepoint.
-    InvalidUtf16Array {
-        /// The first element is a trailing / low surrogate, which is never valid.
-        FirstIsTrailingSurrogate => "the first element is a trailing surrogate",
-        /// The second element is needed, but is not a trailing surrogate.
-        SecondIsNotTrailingSurrogate => "the second element is needed but is not a trailing surrogate",
-    }}
+// simple!{/// Reasons why a `[u16; 2]` doesn't form a valid UTF-16 codepoint.
+//     InvalidUtf16Array {
+//         /// The first element is a trailing / low surrogate, which is never valid.
+//         FirstIsTrailingSurrogate => "the first element is a trailing surrogate",
+//         /// The second element is needed, but is not a trailing surrogate.
+//         SecondIsNotTrailingSurrogate => "the second element is needed but is not a trailing surrogate",
+//     }}
 
-simple!{/// Reasons why one or two `u16`s are not valid UTF-16, in sinking precedence.
-    InvalidUtf16Tuple {
-        /// The first unit is a trailing / low surrogate, which is never valid.
-        FirstIsTrailingSurrogate => "the first unit is a trailing surrogate",
-        /// The provided second elemented is not necessary.
-        SuperfluousSecond => "the second unit is superfluous",
-        /// The first and only unit requires a second unit.
-        MissingSecond => "the first unit requires a second unit",
-        /// The second unit is needed and was provided, but is not a trailing surrogate.
-        SecondIsNotTrailingSurrogate => "the required second unit is not a trailing surrogate",
-    }}
+// simple!{/// Reasons why one or two `u16`s are not valid UTF-16, in sinking precedence.
+//     InvalidUtf16Tuple {
+//         /// The first unit is a trailing / low surrogate, which is never valid.
+//         FirstIsTrailingSurrogate => "the first unit is a trailing surrogate",
+//         /// The provided second elemented is not necessary.
+//         SuperfluousSecond => "the second unit is superfluous",
+//         /// The first and only unit requires a second unit.
+//         MissingSecond => "the first unit requires a second unit",
+//         /// The second unit is needed and was provided, but is not a trailing surrogate.
+//         SecondIsNotTrailingSurrogate => "the required second unit is not a trailing surrogate",
+//     }}
 
 
-simple!{/// Reasons why a slice of `u16`s doesn't start with valid UTF-16.
-    InvalidUtf16Slice {
-        /// The slice is empty.
-        EmptySlice => "the slice is empty",
-        /// The first unit is a trailing surrogate.
-        FirstIsTrailingSurrogate => "the first unit is a trailing surrogate",
-        /// The first and only unit requires a second unit.
-        MissingSecond => "the first and only unit requires a second one",
-        /// The first unit requires a second one, but it's not a trailing surrogate.
-        SecondIsNotTrailingSurrogate => "the required second unit is not a trailing surrogate",
-    }}
+// simple!{/// Reasons why a slice of `u16`s doesn't start with valid UTF-16.
+//     InvalidUtf16Slice {
+//         /// The slice is empty.
+//         EmptySlice => "the slice is empty",
+//         /// The first unit is a trailing surrogate.
+//         FirstIsTrailingSurrogate => "the first unit is a trailing surrogate",
+//         /// The first and only unit requires a second unit.
+//         MissingSecond => "the first and only unit requires a second one",
+//         /// The first unit requires a second one, but it's not a trailing surrogate.
+//         SecondIsNotTrailingSurrogate => "the required second unit is not a trailing surrogate",
+//     }}
 
-simple!{/// Types of invalid sequences encountered by `Utf16CharDecoder`.
-    Utf16PairError {
+simple!{/// Kinds of invalid UTF-16 sequences
+    Utf16Error {
         /// A trailing surrogate was not preceeded by a leading surrogate.
-        UnexpectedTrailingSurrogate => "a trailing surrogate was not preceeded by a leading surrogate",
+        UnexpectedPairEnd => "Mismatched UTF-16 pair",
         /// A leading surrogate was followed by an unit that was not a trailing surrogate.
-        UnmatchedLeadingSurrogate => "a leading surrogate was followed by an unit that was not a trailing surrogate",
+        UnmatchedPairStart => "Incomplete UTF-16 pair",
         /// A trailing surrogate was expected when the end was reached.
-        Incomplete => "a trailing surrogate was expected when the end was reached",
-    }}
+        ///
+        /// or slice is too short
+        /// not returned by from_array
+        TooFewUnits => "Too few units",
+    }
+}
 
 
 simple!{/// Reasons why `Utf8Char::from_str()` or `Utf16Char::from_str()` failed.
@@ -290,3 +289,49 @@ impl PartialEq<Utf8Error> for Utf8ErrorKind {
         *self == error.kind
     }
 }
+
+// /// Reasons why a byte array is not valid UTF-8, in sinking precedence.
+// #[derive(Clone,Copy, Debug, PartialEq,Eq)]
+// pub enum InvalidUtf8Array {
+//     /// Not a valid UTF-8 sequence.
+//     Utf8(InvalidUtf8),
+//     /// Not a valid unicode codepoint.
+//     Codepoint(CodepointError),
+// }
+// complex!{InvalidUtf8Array {
+//         InvalidUtf8 => InvalidUtf8Array::Utf8,
+//         InvalidCodepoint => InvalidUtf8Array::Codepoint,
+//     } {
+//         InvalidUtf8Array::Utf8(_) => "the sequence is invalid UTF-8",
+//         InvalidUtf8Array::Codepoint(_) => "the encoded codepoint is invalid",
+//     } => true => {
+//         InvalidUtf8Array::Utf8(ref u) => Some(u),
+//         InvalidUtf8Array::Codepoint(ref c) => Some(c),
+//     }/// Always returns `Some`.
+// }
+
+
+// /// Reasons why a byte slice is not valid UTF-8, in sinking precedence.
+// #[derive(Clone,Copy, Debug, PartialEq,Eq)]
+// pub enum InvalidUtf8Slice {
+//     /// Something is certainly wrong with the first byte.
+//     Utf8(InvalidUtf8),
+//     /// The encoded codepoint is invalid:
+//     Codepoint(CodepointError),
+//     /// The slice is too short; n bytes was required.
+//     TooShort(usize),
+// }
+// complex!{InvalidUtf8Slice {
+//         InvalidUtf8 => InvalidUtf8Slice::Utf8,
+//         InvalidCodepoint => InvalidUtf8Slice::Codepoint,
+//     } {
+//         InvalidUtf8Slice::Utf8(_) => "the sequence is invalid UTF-8",
+//         InvalidUtf8Slice::Codepoint(_) => "the encoded codepoint is invalid",
+//         InvalidUtf8Slice::TooShort(1) => "the slice is empty",
+//         InvalidUtf8Slice::TooShort(_) => "the slice is shorter than the sequence",
+//     } => true => {
+//         InvalidUtf8Slice::Utf8(ref u) => Some(u),
+//         InvalidUtf8Slice::Codepoint(ref c) => Some(c),
+//         InvalidUtf8Slice::TooShort(_) => None,
+//     }
+// }

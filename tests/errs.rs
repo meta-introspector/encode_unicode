@@ -16,6 +16,7 @@ extern crate encode_unicode;
 use encode_unicode::*;
 use encode_unicode::error::*;
 use encode_unicode::error::CodepointError::*;
+use encode_unicode::error::Utf16Error::*;
 use encode_unicode::error::Utf8ErrorKind::*;
 
 
@@ -58,7 +59,7 @@ fn kind<T>(result: Result<T,Utf8Error>) -> Result<T,Utf8ErrorKind> {
         assert_eq!( (c as u16).utf16_needs_extra_unit(), match c {
             0b_0000_0000_0000_0000..=0b_1101_0111_1111_1111 => Ok(false),
             0b_1101_1000_0000_0000..=0b_1101_1011_1111_1111 => Ok(true),
-            0b_1101_1100_0000_0000..=0b_1101_1111_1111_1111 => Err(InvalidUtf16FirstUnit),
+            0b_1101_1100_0000_0000..=0b_1101_1111_1111_1111 => Err(UnexpectedPairEnd),
             0b_1110_0000_0000_0000..=0b_1111_1111_1111_1111 => Ok(false),
                                    _                        => unreachable!(),
         });
@@ -67,41 +68,39 @@ fn kind<T>(result: Result<T,Utf8Error>) -> Result<T,Utf8ErrorKind> {
 
 
 #[test] fn from_utf16_tuple() {
-    use encode_unicode::error::InvalidUtf16Tuple::*;
     for u in 0xdc00..0xe000 {
         let close = if u%3==0 {u-100} else {u+100};
         let doesnt_matter = if u%2==0 {Some(close)} else {None};
-        assert_eq!(char::from_utf16_tuple((u,doesnt_matter)), Err(FirstIsTrailingSurrogate));
+        assert_eq!(char::from_utf16_tuple((u,doesnt_matter)), Err(UnexpectedPairEnd));
     }
     for u in (0..0xd800).chain(0xe000..0x10000) {
         assert_eq!(
             char::from_utf16_tuple((u as u16, Some((0x100+u) as u16))),
-            Err(SuperfluousSecond)
+            char::from_u32(u)
         );
     }
     for u in 0xd800..0xdc00 {
-        assert_eq!(char::from_utf16_tuple((u,None)), Err(MissingSecond));
-        assert_eq!(char::from_utf16_tuple((u,Some(u - 0x2ff))), Err(SecondIsNotTrailingSurrogate));
+        assert_eq!(char::from_utf16_tuple((u,None)), Err(TooFewUnits));
+        assert_eq!(char::from_utf16_tuple((u,Some(u - 0x2ff))), Err(UnmatchedPairStart));
     }
 }
 
 #[test] fn from_utf16_slice_start() {
-    use encode_unicode::error::InvalidUtf16Slice::*;
-    assert_eq!(char::from_utf16_slice_start(&[]), Err(EmptySlice));
+    assert_eq!(char::from_utf16_slice_start(&[]), Err(TooFewUnits));
     let mut buf = [0; 6];
     for u in 0xd800..0xdc00 {
         buf[0] = u;
-        assert_eq!(char::from_utf16_slice_start(&buf[..1]), Err(MissingSecond));
+        assert_eq!(char::from_utf16_slice_start(&buf[..1]), Err(TooFewUnits));
         buf[1] = u;
         let pass = 2 + (u as usize % (buf.len()-2));
-        assert_eq!(char::from_utf16_slice_start(&buf[..pass]), Err(SecondIsNotTrailingSurrogate));
+        assert_eq!(char::from_utf16_slice_start(&buf[..pass]), Err(UnmatchedPairStart));
     }
     for u in 0xdc00..0xe000 {
         buf[0] = u;
         let close = if u%3==0 {u-100} else {u+100};
         let pass = 1 + (u as usize % (buf.len()-1));
         buf[pass] = close;
-        assert_eq!(char::from_utf16_slice_start(&buf[..pass]), Err(FirstIsTrailingSurrogate));
+        assert_eq!(char::from_utf16_slice_start(&buf[..pass]), Err(UnexpectedPairEnd));
     }
 }
 
